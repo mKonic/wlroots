@@ -83,6 +83,9 @@ static bool merger_add_exportable(struct wlr_drm_syncobj_merger *merger,
 		int fd2 = new_sync;
 		new_sync = sync_file_merge(merger->sync_fd, fd2);
 		close(fd2);
+		if (new_sync < 0) {
+			return false;
+		}
 		close(merger->sync_fd);
 	}
 	merger->sync_fd = new_sync;
@@ -123,6 +126,7 @@ bool wlr_drm_syncobj_merger_add(struct wlr_drm_syncobj_merger *merger,
 	}
 	if (!wlr_drm_syncobj_timeline_waiter_init(&add->waiter, src_timeline, src_point,
 			flags, loop, export_waiter_handle_ready)) {
+		free(add);
 		return false;
 	}
 	add->merger = merger;
