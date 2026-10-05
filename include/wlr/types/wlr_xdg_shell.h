@@ -290,6 +290,11 @@ struct wlr_xdg_surface {
 	struct wl_list popups; // wlr_xdg_popup.link
 
 	bool configured;
+	// atrium: a commit with a buffer before the first configure was acked,
+	// after the initial commit (Qt reconnecting after a compositor restart),
+	// waits locked until the ack instead of being a protocol error.
+	bool unconfigured_held;
+	uint32_t unconfigured_seq;
 	struct wl_event_source *configure_idle;
 	uint32_t scheduled_serial;
 	struct wl_list configure_list;

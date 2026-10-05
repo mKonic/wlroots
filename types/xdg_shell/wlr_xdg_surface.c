@@ -23,7 +23,15 @@ static void xdg_surface_configure_destroy(
 // 1) a surface is unmapped due to a commit with NULL buffer, or
 // 2) the xdg_surface role object implementation is destroyed
 
+static void release_unconfigured(struct wlr_xdg_surface *surface) {
+	if (surface->unconfigured_held) {
+		surface->unconfigured_held = false;
+		wlr_surface_unlock_cached(surface->surface, surface->unconfigured_seq);
+	}
+}
+
 static void reset_xdg_surface(struct wlr_xdg_surface *surface) {
+	release_unconfigured(surface);
 	surface->configured = false;
 	surface->initialized = false;
 
@@ -121,6 +129,9 @@ static void xdg_surface_handle_ack_configure(struct wl_client *client,
 
 	wl_signal_emit_mutable(&surface->events.ack_configure, configure);
 	xdg_surface_configure_destroy(configure);
+
+	// What was held for this ack goes in now.
+	release_unconfigured(surface);
 }
 
 static void surface_send_configure(void *user_data) {
@@ -284,9 +295,19 @@ static void xdg_surface_role_client_commit(struct wlr_surface *wlr_surface) {
 	assert(surface != NULL);
 
 	if (wlr_surface_state_has_buffer(&wlr_surface->pending) && !surface->configured) {
-		wlr_surface_reject_pending(wlr_surface, surface->resource,
-			XDG_SURFACE_ERROR_UNCONFIGURED_BUFFER, "xdg_surface has never been configured");
-		return;
+		// On the initial commit it is the error the protocol says. After
+		// it, Qt does it reconnecting after a compositor restart (its render
+		// thread swaps into the new surface before the ack): the commit is
+		// held, and goes in after the ack (atrium).
+		if (!surface->initialized) {
+			wlr_surface_reject_pending(wlr_surface, surface->resource,
+				XDG_SURFACE_ERROR_UNCONFIGURED_BUFFER, "xdg_surface has never been configured");
+			return;
+		}
+		if (!surface->unconfigured_held) {
+			surface->unconfigured_held = true;
+			surface->unconfigured_seq = wlr_surface_lock_pending(wlr_surface);
+		}
 	}
 
 	if (surface->role_resource == NULL) {
