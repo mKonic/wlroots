@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <wayland-server-core.h>
@@ -165,6 +166,66 @@ static void surface_state_transformed_buffer_size(struct wlr_surface_state *stat
  * rectangle) but before applying the viewport scaling (via the viewport's
  * destination rectangle).
  */
+struct client_scale {
+	struct wl_client *client;
+	double scale;
+	struct wl_listener destroy;
+	struct wl_list link;
+};
+
+static struct wl_list client_scales = { &client_scales, &client_scales };
+
+static struct client_scale *client_scale_find(struct wl_client *client) {
+	struct client_scale *cs;
+	wl_list_for_each(cs, &client_scales, link) {
+		if (cs->client == client) {
+			return cs;
+		}
+	}
+	return NULL;
+}
+
+static void client_scale_destroy(struct client_scale *cs) {
+	wl_list_remove(&cs->destroy.link);
+	wl_list_remove(&cs->link);
+	free(cs);
+}
+
+static void client_scale_handle_destroy(struct wl_listener *listener, void *data) {
+	struct client_scale *cs = wl_container_of(listener, cs, destroy);
+	client_scale_destroy(cs);
+}
+
+void wlr_client_set_scale_override(struct wl_client *client, double scale) {
+	struct client_scale *cs = client_scale_find(client);
+	if (scale == 1 || scale <= 0) {
+		if (cs != NULL) {
+			client_scale_destroy(cs);
+		}
+		return;
+	}
+	if (cs == NULL) {
+		cs = calloc(1, sizeof(*cs));
+		if (cs == NULL) {
+			return;
+		}
+		cs->client = client;
+		cs->destroy.notify = client_scale_handle_destroy;
+		wl_client_add_destroy_listener(client, &cs->destroy);
+		wl_list_insert(&client_scales, &cs->link);
+	}
+	cs->scale = scale;
+}
+
+double wlr_client_get_scale_override(struct wl_client *client) {
+	struct client_scale *cs = client != NULL ? client_scale_find(client) : NULL;
+	return cs != NULL ? cs->scale : 1;
+}
+
+static double surface_scale_override(struct wlr_surface *surface) {
+	return wlr_client_get_scale_override(wl_resource_get_client(surface->resource));
+}
+
 static void surface_state_viewport_src_size(struct wlr_surface_state *state,
 		int *out_width, int *out_height) {
 	if (state->buffer_width == 0 && state->buffer_height == 0) {
@@ -235,6 +296,11 @@ static void surface_finalize_pending(struct wlr_surface *surface) {
 		}
 	} else {
 		surface_state_viewport_src_size(pending, &pending->width, &pending->height);
+		const double override = surface_scale_override(surface);
+		if (override != 1 && pending->width > 0 && pending->height > 0) {
+			pending->width = fmax(1, round(pending->width / override));
+			pending->height = fmax(1, round(pending->height / override));
+		}
 	}
 
 	pixman_region32_intersect_rect(&pending->surface_damage,
@@ -457,12 +523,33 @@ static void surface_update_opaque_region(struct wlr_surface *surface) {
 		return;
 	}
 
+	const double override = surface_scale_override(surface);
+	if (override != 1) {
+		// In the client's own pixels: the region shrinks with the surface.
+		pixman_region32_t scaled;
+		pixman_region32_init(&scaled);
+		wlr_region_scale(&scaled, &surface->current.opaque, 1.0 / override);
+		pixman_region32_intersect_rect(&surface->opaque_region, &scaled,
+			0, 0, surface->current.width, surface->current.height);
+		pixman_region32_fini(&scaled);
+		return;
+	}
 	pixman_region32_intersect_rect(&surface->opaque_region,
 		&surface->current.opaque,
 		0, 0, surface->current.width, surface->current.height);
 }
 
 static void surface_update_input_region(struct wlr_surface *surface) {
+	const double override = surface_scale_override(surface);
+	if (override != 1) {
+		pixman_region32_t scaled;
+		pixman_region32_init(&scaled);
+		wlr_region_scale(&scaled, &surface->current.input, 1.0 / override);
+		pixman_region32_intersect_rect(&surface->input_region, &scaled,
+			0, 0, surface->current.width, surface->current.height);
+		pixman_region32_fini(&scaled);
+		return;
+	}
 	pixman_region32_intersect_rect(&surface->input_region,
 		&surface->current.input,
 		0, 0, surface->current.width, surface->current.height);

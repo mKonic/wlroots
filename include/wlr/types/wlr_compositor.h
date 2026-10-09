@@ -319,6 +319,18 @@ void wlr_surface_set_role_object(struct wlr_surface *surface, struct wl_resource
 void wlr_surface_map(struct wlr_surface *surface);
 
 /**
+ * A client that draws at a scale of its own (Xwayland, scaling its apps
+ * itself, as KWin's "Apply scaling themselves"): its buffers count as
+ * `scale` (their surfaces are buffer / scale big, opaque and input regions
+ * likewise), and the outputs (xdg-output) and pointer positions it is sent are
+ * multiplied by it. 1 (the default) undoes it; it goes with the client.
+ * Callers resend output details after a change
+ * (wlr_xdg_output_manager_v1_refresh).
+ */
+void wlr_client_set_scale_override(struct wl_client *client, double scale);
+double wlr_client_get_scale_override(struct wl_client *client);
+
+/**
  * Unmap the surface. If the surface is already unmapped, this is no-op.
  *
  * This function must only be used by surface role implementations.

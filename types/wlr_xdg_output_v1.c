@@ -1,6 +1,8 @@
 #include <assert.h>
+#include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
@@ -26,10 +28,12 @@ static void output_handle_resource_destroy(struct wl_resource *resource) {
 
 static void output_send_details(struct wlr_xdg_output_v1 *xdg_output,
 		struct wl_resource *resource) {
+	// A client at a scale of its own sees the layout at that scale.
+	const double s = wlr_client_get_scale_override(wl_resource_get_client(resource));
 	zxdg_output_v1_send_logical_position(resource,
-		xdg_output->x, xdg_output->y);
+		(int32_t)round(xdg_output->x * s), (int32_t)round(xdg_output->y * s));
 	zxdg_output_v1_send_logical_size(resource,
-		xdg_output->width, xdg_output->height);
+		(int32_t)round(xdg_output->width * s), (int32_t)round(xdg_output->height * s));
 	if (wl_resource_get_version(resource) < OUTPUT_DONE_DEPRECATED_SINCE_VERSION) {
 		zxdg_output_v1_send_done(resource);
 	}
@@ -292,4 +296,15 @@ struct wlr_xdg_output_manager_v1 *wlr_xdg_output_manager_v1_create(
 	wl_display_add_destroy_listener(display, &manager->display_destroy);
 
 	return manager;
+}
+
+void wlr_xdg_output_manager_v1_refresh(struct wlr_xdg_output_manager_v1 *manager) {
+	struct wlr_xdg_output_v1 *output;
+	wl_list_for_each(output, &manager->outputs, link) {
+		struct wl_resource *resource;
+		wl_resource_for_each(resource, &output->resources) {
+			output_send_details(output, resource);
+		}
+		wlr_output_schedule_done(output->layout_output->output);
+	}
 }

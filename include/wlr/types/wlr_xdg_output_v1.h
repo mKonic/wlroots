@@ -48,4 +48,9 @@ struct wlr_xdg_output_manager_v1 {
 struct wlr_xdg_output_manager_v1 *wlr_xdg_output_manager_v1_create(
 	struct wl_display *display, struct wlr_output_layout *layout);
 
+/**
+ * Send every output's details again (a client's scale override changed).
+ */
+void wlr_xdg_output_manager_v1_refresh(struct wlr_xdg_output_manager_v1 *manager);
+
 #endif
