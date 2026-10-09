@@ -205,6 +205,15 @@ static bool init_mgpu_renderer(struct wlr_drm_backend *drm) {
 	return true;
 }
 
+void wlr_drm_backend_set_primary_renderer(struct wlr_backend *backend,
+		struct wlr_renderer *renderer) {
+	if (!wlr_backend_is_drm(backend)) {
+		return;
+	}
+	struct wlr_drm_backend *drm = get_drm_backend_from_backend(backend);
+	drm->mgpu_renderer.copy_from = renderer;
+}
+
 struct wlr_backend *wlr_drm_backend_create(struct wlr_session *session,
 		struct wlr_device *dev, struct wlr_backend *parent) {
 	assert(session && dev);

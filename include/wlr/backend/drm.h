@@ -48,6 +48,15 @@ bool wlr_output_is_drm(struct wlr_output *output);
 struct wlr_backend *wlr_drm_backend_get_parent(struct wlr_backend *backend);
 
 /**
+ * The renderer the compositor draws with (the primary GPU's). A secondary
+ * GPU whose own renderer can't import the frames it draws gets them through
+ * the CPU instead: read back with this renderer, uploaded to its own. NULL
+ * turns that off.
+ */
+void wlr_drm_backend_set_primary_renderer(struct wlr_backend *backend,
+	struct wlr_renderer *renderer);
+
+/**
  * Get the KMS connector object ID.
  */
 uint32_t wlr_drm_connector_get_id(struct wlr_output *output);

@@ -1,5 +1,7 @@
 #include <assert.h>
 #include <drm_fourcc.h>
+#include <stdlib.h>
+#include <wlr/render/wlr_texture.h>
 #include <wlr/render/allocator.h>
 #include <wlr/render/drm_syncobj.h>
 #include <wlr/render/swapchain.h>
@@ -88,6 +90,34 @@ bool init_drm_surface(struct wlr_drm_surface *surf,
 	return true;
 }
 
+// A frame the multi-GPU renderer can't import (a GPU without its own 3D,
+// buffers it can't reach): read back by the primary renderer, which drew
+// it, and uploaded here as pixels.
+static struct wlr_texture *texture_through_cpu(struct wlr_drm_renderer *r, struct wlr_buffer *buffer) {
+	if (r->copy_from == NULL) {
+		return NULL;
+	}
+	struct wlr_texture *src = wlr_texture_from_buffer(r->copy_from, buffer);
+	if (src == NULL) {
+		return NULL;
+	}
+	const uint32_t format = DRM_FORMAT_ARGB8888;
+	const uint32_t stride = (uint32_t)buffer->width * 4;
+	void *data = malloc((size_t)stride * (size_t)buffer->height);
+	struct wlr_texture *tex = NULL;
+	if (data != NULL && wlr_texture_read_pixels(src, &(struct wlr_texture_read_pixels_options){
+			.data = data,
+			.format = format,
+			.stride = stride,
+		})) {
+		tex = wlr_texture_from_pixels(r->wlr_rend, format, stride,
+			(uint32_t)buffer->width, (uint32_t)buffer->height, data);
+	}
+	free(data);
+	wlr_texture_destroy(src);
+	return tex;
+}
+
 struct wlr_buffer *drm_surface_blit(struct wlr_drm_surface *surf,
 		struct wlr_buffer *buffer,
 		struct wlr_drm_syncobj_timeline *wait_timeline, uint64_t wait_point) {
@@ -100,6 +130,13 @@ struct wlr_buffer *drm_surface_blit(struct wlr_drm_surface *surf,
 	}
 
 	struct wlr_texture *tex = wlr_texture_from_buffer(renderer, buffer);
+	if (tex == NULL) {
+		tex = texture_through_cpu(surf->renderer, buffer);
+		if (tex != NULL && !surf->cpu_copy_logged) {
+			wlr_log(WLR_INFO, "Multi-GPU renderer can't import the frames: copying them through the CPU");
+			surf->cpu_copy_logged = true;
+		}
+	}
 	if (tex == NULL) {
 		wlr_log(WLR_ERROR, "Failed to import source buffer into multi-GPU renderer");
 		return NULL;

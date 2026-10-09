@@ -15,11 +15,15 @@ struct wlr_buffer;
 struct wlr_drm_renderer {
 	struct wlr_renderer *wlr_rend;
 	struct wlr_allocator *allocator;
+	// The primary GPU's renderer, to read a frame this one can't import
+	// back through the CPU (wlr_drm_backend_set_primary_renderer).
+	struct wlr_renderer *copy_from;
 };
 
 struct wlr_drm_surface {
 	struct wlr_drm_renderer *renderer;
 	struct wlr_swapchain *swapchain;
+	bool cpu_copy_logged;
 
 	struct wlr_drm_syncobj_timeline *timeline;
 	uint64_t point;
