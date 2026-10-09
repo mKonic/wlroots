@@ -455,6 +455,7 @@ void create_xdg_surface(struct wlr_xdg_client *client, struct wlr_surface *wlr_s
 
 	wl_signal_init(&surface->events.destroy);
 	wl_signal_init(&surface->events.ping_timeout);
+	wl_signal_init(&surface->events.pong);
 	wl_signal_init(&surface->events.new_popup);
 	wl_signal_init(&surface->events.configure);
 	wl_signal_init(&surface->events.ack_configure);
@@ -554,6 +555,7 @@ void destroy_xdg_surface(struct wlr_xdg_surface *surface) {
 
 	assert(wl_list_empty(&surface->events.destroy.listener_list));
 	assert(wl_list_empty(&surface->events.ping_timeout.listener_list));
+	assert(wl_list_empty(&surface->events.pong.listener_list));
 	assert(wl_list_empty(&surface->events.new_popup.listener_list));
 	assert(wl_list_empty(&surface->events.configure.listener_list));
 	assert(wl_list_empty(&surface->events.ack_configure.listener_list));

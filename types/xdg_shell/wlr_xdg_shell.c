@@ -39,6 +39,11 @@ static void xdg_shell_handle_pong(struct wl_client *wl_client,
 
 	wl_event_source_timer_update(client->ping_timer, 0);
 	client->ping_serial = 0;
+
+	struct wlr_xdg_surface *surface;
+	wl_list_for_each(surface, &client->surfaces, link) {
+		wl_signal_emit_mutable(&surface->events.pong, NULL);
+	}
 }
 
 static void xdg_shell_handle_destroy(struct wl_client *wl_client,

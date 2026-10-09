@@ -311,6 +311,8 @@ struct wlr_xdg_surface {
 	struct {
 		struct wl_signal destroy;
 		struct wl_signal ping_timeout;
+		// The client answered a ping (on each of its surfaces).
+		struct wl_signal pong;
 		struct wl_signal new_popup;
 
 		// for protocol extensions
