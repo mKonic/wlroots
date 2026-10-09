@@ -1135,6 +1135,11 @@ void wlr_scene_buffer_set_opacity(struct wlr_scene_buffer *scene_buffer,
 	scene_node_update(&scene_buffer->node, NULL);
 }
 
+void wlr_scene_buffer_set_client_opacity(struct wlr_scene_buffer *scene_buffer,
+		float opacity) {
+	wlr_scene_buffer_set_opacity(scene_buffer, opacity);
+}
+
 void wlr_scene_buffer_set_filter_mode(struct wlr_scene_buffer *scene_buffer,
 		enum wlr_scale_filter_mode filter_mode) {
 	if (scene_buffer->filter_mode == filter_mode) {

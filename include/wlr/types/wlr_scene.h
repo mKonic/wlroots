@@ -555,6 +555,13 @@ void wlr_scene_buffer_set_opacity(struct wlr_scene_buffer *scene_buffer,
 	float opacity);
 
 /**
+ * The opacity the client asks for (wp_alpha_modifier_v1). Here it is the
+ * buffer's opacity; scenefx keeps it apart from the compositor's.
+ */
+void wlr_scene_buffer_set_client_opacity(struct wlr_scene_buffer *scene_buffer,
+	float opacity);
+
+/**
 * Sets the filter mode to use when scaling the buffer
 */
 void wlr_scene_buffer_set_filter_mode(struct wlr_scene_buffer *scene_buffer,

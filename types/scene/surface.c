@@ -313,7 +313,9 @@ static void surface_reconfigure(struct wlr_scene_surface *scene_surface) {
 	wlr_scene_buffer_set_source_box(scene_buffer, &src_box);
 	wlr_scene_buffer_set_dest_size(scene_buffer, width, height);
 	wlr_scene_buffer_set_transform(scene_buffer, state->transform);
-	wlr_scene_buffer_set_opacity(scene_buffer, opacity);
+	// The client's say only: what the compositor set stays (atrium fades
+	// windows out under its overview).
+	wlr_scene_buffer_set_client_opacity(scene_buffer, opacity);
 	wlr_scene_buffer_set_transfer_function(scene_buffer, tf);
 	wlr_scene_buffer_set_primaries(scene_buffer, primaries);
 	wlr_scene_buffer_set_color_encoding(scene_buffer, color_encoding);
