@@ -1944,6 +1944,11 @@ static void xwm_handle_focus_in(struct wlr_xwm *xwm,
 		return;
 	}
 
+	// Our own doing (wlr_xwayland_focus_nothing), not a client's.
+	if (ev->event == xwm->no_focus_window && xwm->focus_surface == NULL) {
+		return;
+	}
+
 	// Allow focus changes between surfaces belonging to the same
 	// application. Steam for example relies on this:
 	// https://github.com/swaywm/sway/issues/1865
@@ -2903,6 +2908,21 @@ void wlr_xwayland_set_workareas(struct wlr_xwayland *wlr_xwayland,
 xcb_connection_t *wlr_xwayland_get_xwm_connection(
 	struct wlr_xwayland *wlr_xwayland) {
 	return wlr_xwayland->xwm ? wlr_xwayland->xwm->xcb_conn : NULL;
+}
+
+void wlr_xwayland_focus_nothing(struct wlr_xwayland *wlr_xwayland) {
+	struct wlr_xwm *xwm = wlr_xwayland->xwm;
+	if (xwm == NULL || xwm->focus_surface != NULL || !xwm->no_focus_window) {
+		return;
+	}
+	// KWin's Workspace::focusToNull: a window of our own rather than
+	// PointerRoot, which lets the X11 window under the pointer believe it is
+	// focused, or None, which blocks the keyboard (root grabs included).
+	xcb_void_cookie_t cookie = xcb_set_input_focus(xwm->xcb_conn,
+		XCB_INPUT_FOCUS_POINTER_ROOT, xwm->no_focus_window, XCB_CURRENT_TIME);
+	xwm->last_focus_seq = cookie.sequence;
+	xwm_set_net_active_window(xwm, XCB_WINDOW_NONE);
+	xwm_schedule_flush(xwm);
 }
 
 void xwm_schedule_flush(struct wlr_xwm *xwm) {

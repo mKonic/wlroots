@@ -427,4 +427,11 @@ bool wlr_xwayland_surface_fetch_icon(
 xcb_connection_t *wlr_xwayland_get_xwm_connection(
 	struct wlr_xwayland *wlr_xwayland);
 
+/**
+ * With no X11 window focused, move X input focus off every X11 window (to a
+ * window of the XWM's own) and set _NET_ACTIVE_WINDOW to None, for when a
+ * native Wayland window has the keyboard. Root-window key grabs still fire.
+ */
+void wlr_xwayland_focus_nothing(struct wlr_xwayland *wlr_xwayland);
+
 #endif
