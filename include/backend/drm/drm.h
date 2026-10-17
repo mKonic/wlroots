@@ -164,6 +164,7 @@ struct wlr_drm_connector_state {
 	bool vrr_enabled;
 	uint32_t colorspace;
 	uint32_t hdr_output_metadata;
+	int64_t sdr_infoframe_until;
 };
 
 /**
@@ -221,6 +222,14 @@ struct wlr_drm_connector {
 	// Atomic modesetting only
 	uint32_t colorspace;
 	uint32_t hdr_output_metadata;
+	// Ending HDR, CTA-861-H has the source send an explicit SDR DRM
+	// infoframe (EOTF 0, no metadata) for two seconds before it stops: sent
+	// until this time (get_current_time_msec), 0 when not. A sink left in
+	// HDR (another DRM master, a crash, a power cut) gets the same when its
+	// state is unknown, on the first SDR commit after it's connected.
+	int64_t sdr_infoframe_until;
+	bool sink_state_unknown;
+	bool sdr_infoframe_supported; // the sink lists HDR and traditional SDR
 
 	int32_t refresh;
 };

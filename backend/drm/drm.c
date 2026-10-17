@@ -1767,6 +1767,7 @@ static bool connect_drm_connector(struct wlr_drm_connector *wlr_conn,
 
 	free(subconnector);
 	wlr_conn->status = DRM_MODE_CONNECTED;
+	wlr_conn->sink_state_unknown = true;
 	return true;
 }
 

@@ -11,6 +11,7 @@
 #include "backend/drm/iface.h"
 #include "backend/drm/util.h"
 #include "render/color.h"
+#include "util/time.h"
 
 static char *atomic_commit_flags_str(uint32_t flags) {
 	const char *const l[] = {
@@ -247,6 +248,20 @@ static bool create_hdr_output_metadata_blob(struct wlr_drm_backend *drm,
 	return true;
 }
 
+// CTA-861-H's "no longer HDR": EOTF 0 (traditional gamma, SDR) and every
+// metadata field 0.
+static bool create_sdr_output_metadata_blob(struct wlr_drm_backend *drm, uint32_t *blob_id) {
+	struct hdr_output_metadata metadata = {
+		.metadata_type = 0,
+		.hdmi_metadata_type1 = { .eotf = 0, .metadata_type = 0 },
+	};
+	if (drmModeCreatePropertyBlob(drm->fd, &metadata, sizeof(metadata), blob_id) != 0) {
+		wlr_log_errno(WLR_ERROR, "Failed to create HDR_OUTPUT_METADATA property");
+		return false;
+	}
+	return true;
+}
+
 static uint64_t convert_primaries_to_colorspace(uint32_t primaries) {
 	switch (primaries) {
 	case 0:
@@ -388,9 +403,31 @@ bool drm_atomic_connector_prepare(struct wlr_drm_connector_state *state, bool mo
 	}
 
 	uint32_t hdr_output_metadata = conn->hdr_output_metadata;
-	if ((state->base->committed & WLR_OUTPUT_STATE_IMAGE_DESCRIPTION) &&
-			!create_hdr_output_metadata_blob(drm, state->base->image_description, &hdr_output_metadata)) {
-		return false;
+	int64_t sdr_infoframe_until = conn->sdr_infoframe_until;
+	bool desc_changed = state->base->committed & WLR_OUTPUT_STATE_IMAGE_DESCRIPTION;
+	const struct wlr_output_image_description *img_desc =
+		desc_changed ? state->base->image_description : conn->output.image_description;
+	int64_t now = get_current_time_msec();
+	if (img_desc != NULL) {
+		if (desc_changed && !create_hdr_output_metadata_blob(drm, img_desc, &hdr_output_metadata)) {
+			return false;
+		}
+		sdr_infoframe_until = 0;
+	} else if (conn->props.hdr_output_metadata != 0 && conn->sdr_infoframe_supported &&
+			(conn->sink_state_unknown || (desc_changed && conn->hdr_output_metadata != 0 &&
+			conn->sdr_infoframe_until == 0))) {
+		// Leaving HDR, or the sink may still be in it.
+		if (!create_sdr_output_metadata_blob(drm, &hdr_output_metadata)) {
+			return false;
+		}
+		sdr_infoframe_until = now + 2100;
+	} else if (conn->sdr_infoframe_until != 0) {
+		if (now >= conn->sdr_infoframe_until) {
+			hdr_output_metadata = 0;
+			sdr_infoframe_until = 0;
+		}
+	} else if (desc_changed) {
+		hdr_output_metadata = 0;
 	}
 
 	state->mode_id = mode_id;
@@ -400,6 +437,7 @@ bool drm_atomic_connector_prepare(struct wlr_drm_connector_state *state, bool mo
 	state->vrr_enabled = vrr_enabled;
 	state->colorspace = colorspace;
 	state->hdr_output_metadata = hdr_output_metadata;
+	state->sdr_infoframe_until = sdr_infoframe_until;
 	return true;
 }
 
@@ -425,6 +463,8 @@ void drm_atomic_connector_apply_commit(struct wlr_drm_connector_state *state) {
 	}
 
 	conn->colorspace = state->colorspace;
+	conn->sdr_infoframe_until = state->sdr_infoframe_until;
+	conn->sink_state_unknown = false;
 }
 
 void drm_atomic_connector_rollback_commit(struct wlr_drm_connector_state *state) {
@@ -605,6 +645,24 @@ out:
 			drm_atomic_connector_apply_commit(conn_state);
 		} else {
 			drm_atomic_connector_rollback_commit(conn_state);
+		}
+	}
+	if (!ok) {
+		// A driver refusing the SDR infoframe only loses it: the commit
+		// goes again without.
+		bool retry = false;
+		for (size_t i = 0; i < state->connectors_len; i++) {
+			const struct wlr_drm_connector_state *conn_state = &state->connectors[i];
+			struct wlr_drm_connector *conn = conn_state->connector;
+			if (conn_state->sdr_infoframe_until != 0 && conn->sdr_infoframe_until == 0 &&
+					conn->sdr_infoframe_supported) {
+				wlr_drm_conn_log(conn, WLR_INFO, "Commit failed with an SDR infoframe; going on without one");
+				conn->sdr_infoframe_supported = false;
+				retry = true;
+			}
+		}
+		if (retry) {
+			return atomic_device_commit(drm, state, page_flip, flags, test_only);
 		}
 	}
 	return ok;

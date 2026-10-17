@@ -104,6 +104,11 @@ void parse_edid(struct wlr_drm_connector *conn, size_t len, const uint8_t *data)
 	if (conn->props.hdr_output_metadata != 0 && hdr_static_metadata->type1 && hdr_static_metadata->pq) {
 		output->supported_transfer_functions |= WLR_COLOR_TRANSFER_FUNCTION_ST2084_PQ;
 	}
+	// The kernel sends an SDR DRM infoframe only to a sink listing it (and
+	// libdisplay-info says traditional SDR for sinks with no HDR at all).
+	conn->sdr_infoframe_supported = conn->props.hdr_output_metadata != 0 &&
+		hdr_static_metadata->type1 && hdr_static_metadata->pq &&
+		hdr_static_metadata->traditional_sdr;
 
 	di_info_destroy(info);
 }
